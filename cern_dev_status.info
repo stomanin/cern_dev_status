@@ -1,0 +1,16 @@
+name = CERN Dev-Status
+description = Features for development, test and pre-production websites.
+core = 7.x
+dependencies[] = block
+files[] = cern_dev_status.module
+files[] = cern_dev_status.install
+files[] = cern_dev_status.admin.inc
+files[] = cern_dev_status.default_settings.inc
+
+scripts[] = js/cern_dev_status.js
+stylesheets[all][] = css/dev_styling.css
+
+configure = admin/config/development/cern_dev_status
+
+package = CERN Devel
+version = 7.x-2.0-cern

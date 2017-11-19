@@ -1,0 +1,328 @@
+<?php
+
+// $Id$
+
+include_once 'cern_dev_status.default_settings.inc';
+/**
+* Implementation of hook_menu()
+*/
+
+function cern_dev_status_menu() {
+  $items = array();
+  $items['admin/config/development/cern_dev_status'] = array(
+    'title' => 'CERN dev-status',
+    'description' => 'Configurations for development sites',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('cern_dev_status_settings_form'),
+    'access arguments' => array('Administer CERN dev-status'),
+    'file' => 'cern_dev_status.admin.inc',
+  );
+  
+  $items['cern_dev_status/access_denied'] = array
+  (
+    'title' => 'Access Denied',
+    'page callback' => 'denied',
+  );
+  return $items;
+}
+
+/**
+ * Implementation of hook_permission()
+ */
+
+function cern_dev_status_permission() {
+  return array
+  ('Administer CERN dev-status' => array('title' => 'Administer CERN dev-status'));
+}
+
+
+ 
+//Implements RESET TO DEFAULT button for cern_dev_status_settings_form 
+
+/**
+ * Implements hook_form_alter().
+ * Add the reset button to the settings form
+ */
+function cern_dev_status_form_alter(&$form, $form_state, $form_id) {
+  if ($form_id =='cern_dev_status_settings_form') {
+    if (isset($form['actions']) && !empty($form['#submit']) && in_array('system_settings_form_submit', $form['#submit'])) {
+      // Add the reset button.
+      $form['actions']['reset'] = array(
+        '#type' => 'submit',
+        '#value' => t('Reset to defaults'),
+        '#submit' => array('cern_dev_status_form_reset'),
+      );
+    }
+  }
+}
+
+/**
+ * Implements hook_page_alter().
+ * If the dev-styling is enabled,
+ * injects some html on the pages with the style for the environment chosen.
+ * Dashboard won't be affected.
+ */
+function cern_dev_status_page_alter(&$page) {
+  
+  if (variable_get('cern_dev_status_enable_devstyling', DEFAULT_ENABLE_DEVSTYLING)) {
+    $style = variable_get('cern_dev_status_devstyling_type', DEFAULT_DEVSTYLING_TYPE);
+    $message = variable_get('cern_dev_status_devstyling_message', '');
+    $page['page_bottom']['cern_dev_status'] = array(
+      '#markup' => _cern_dev_status_output($style, $message),
+    );
+  }
+}
+
+/** 
+ * Output the html code to inject on the pages
+ */
+function _cern_dev_status_output($style, $message) {
+  $output = '';
+    drupal_add_js(drupal_get_path('module', 'cern_dev_status') . '/js/cern_dev_status_expand.js');
+  
+  $output .= '<div id="dev-status-message" class="dev-status-' . $style . ' js-disabled">';
+  $output .= '<div id="dev-status-action"><span class="action-open">open +</span><span class="action-close">close -</span></div>';
+  $output .= '<div id="dev-status-message-content">';
+  $output .= '<span id="dev-status-icon" ></span>';
+  
+  $output .= '  <h3>This is a <strong>' . _cern_dev_status_hr($style) . '</strong> website</h3>';
+  if (isset($message)) $output .= '<p>' . check_plain($message) . '</p>';
+  if (user_access('Administer CERN dev-status')) $output .= '<p><em>To disable this warning <a href="' . url('admin/config/development/cern_dev_status') . '">configure</a> the CERN Dev-Status module.</em></p>';
+
+  $output .='</div><!-- / dev-status-message-content -->';
+  $output .='</div><!-- / dev-status-message -->';
+  
+  return $output;
+}
+/**
+ * Helper function to convert the style names from machine to human readable.
+ */
+function _cern_dev_status_hr($style_machine_code) {
+  switch ($style_machine_code) {
+    case 'dev':
+      $human = 'Development';
+      break;
+    case 'test':
+      $human = 'Test';
+      break;
+    case 'preprod':
+      $human = 'Pre-production';
+      break;
+  }
+  return $human;
+}
+/**
+ * Form submit handler; perform the old system_settings_form_submit() behavior.
+ */
+function cern_dev_status_form_reset($form, &$form_state) {
+  // Exclude unnecessary elements.
+  form_state_values_clean($form_state);
+
+  foreach ($form_state['values'] as $key => $value) {
+    variable_del($key);
+  }
+
+  drupal_set_message(t('The configuration options have been reset to their default values.'));
+}
+
+ 
+ 
+ /**
+ * Implements hook_init().
+ *
+ * 1. Add a <meta name="robots" content="noindex" /> to all pages (if option's enabled)
+ * 2. Determines whether or not the user should be whitelisted, and if they should, it sets a flag indicating so (if ip restriction opt enabled)
+ */
+function cern_dev_status_init() {
+
+  // NO INDEX
+  $en_noindex = variable_get('cern_dev_status_enable_noindex', DEFAULT_ENABLE_NOINDEX);
+  if ($en_noindex) {
+  
+    $element = array(
+      '#tag' => 'meta', // The #tag is the html tag - <meta />
+      '#attributes' => array( // Set up an array of attributes inside the tag
+        'name' => 'robots', 
+        'content' => 'noindex',
+      ),
+    );
+    drupal_add_html_head($element, 'cern_dev_status_noindex');
+  }
+
+  //IP RESTRICTION 
+  $en_restrictip = variable_get('cern_dev_status_enable_restrict_ip', DEFAULT_ENABLE_RESTRICTIP);
+  if ($en_restrictip) {
+
+    $access_denied = FALSE;
+
+    // If override option enabled: block access only for anonymous users and  
+    // let authenticated users in even if their IP is not on the list! 
+    // If not enabled go haed and check the ip restriction!
+    global $user; 
+    $override_auth_usrs = variable_get('cern_dev_status_restrict_ip_override_auth_users', DEFAULT_ENABLE_OVERRIDE_AUTH_USERS);
+
+    if ( (!$override_auth_usrs) || (($override_auth_usrs) && ($user->uid=='0')) ) {
+      $ip_addresses = trim(variable_get('cern_dev_status_restrict_ip_address_list', DEFAULT_IP_ADDDRESS_LIST));
+      if (strlen($ip_addresses)) {
+        $ip_addresses = explode(PHP_EOL, $ip_addresses);
+        $users_ip = ip_address();
+          
+        $access_denied = TRUE;
+        foreach ($ip_addresses as $ip_address) { 
+          //ip range in CIDR syntax
+          if (preg_match('@\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\/(?:[12]?[0-9]|3[0-2])\b@', trim($ip_address))) {
+            if (cern_dev_status_ipCIDRCheck($users_ip, $ip_address)) {
+              $access_denied = FALSE;
+              break;
+            }
+          }
+          
+          //single IP
+          elseif (trim($ip_address) == $users_ip) {
+            $access_denied = FALSE;
+            break;
+          }  
+        }  
+      }
+      if ($access_denied) { 
+        if (current_path() != 'cern_dev_status/access_denied') {
+          drupal_goto('cern_dev_status/access_denied');
+        }
+        $contact_mail = trim(variable_get('cern_dev_status_restrict_ip_mail_address', variable_get('site_mail', '')));
+        if (strlen($contact_mail))  $contact_mail = str_replace('@', '[at]', $contact_mail);
+        $contact_text = (strlen($contact_mail)) ? ' ' . t('<br>If you feel this is in error, please contact an administrator at !email.', array('!email' => '<span id="cern_dev_status_contact_mail">' . $contact_mail . '</span>')) : FALSE;
+        drupal_set_message(t('This site cannot be accessed from your IP address.') . $contact_text, 'error', FALSE);
+        cern_dev_status_restrict_ip_value(TRUE);
+        $cern_dev_status_js_path = drupal_get_path('module', 'cern_dev_status') . '/js/cern_dev_status.js';
+        drupal_add_js(drupal_get_path('module', 'cern_dev_status') . '/js/cern_dev_status.js');  
+      }
+      elseif (current_path() == drupal_get_normal_path('cern_dev_status/access_denied')) {
+        drupal_goto('<front>');
+      }
+  
+    }
+  }
+}
+
+ /**
+ * Implements hook_preprocess_page().
+ * 
+ * Removes the data from various areas of the page for users whose accounts have been blocked,
+ * preventing the areas from being rendered (if option's enabled)
+ */
+ 
+function cern_dev_status_preprocess_page(&$items) {
+
+  
+  //IP RESTRICTION 
+   if (cern_dev_status_restrict_ip_value()) {
+    global $theme;
+    $regions = system_region_list($theme, REGIONS_ALL);
+    foreach (array_keys($regions) as $region) {
+      if (isset($items['page'][$region])) $items['page'][$region] = '';
+    }
+    if (isset($items['tabs'])) {
+      if (isset($items['tabs']['#primary'])) $items['tabs']['#primary'] = array();
+      if (isset($items['tabs']['#secondary']))  $items['tabs']['#primary'] = array();
+    }
+    $items['title_prefix'] = array();
+    $items['title_suffix'] = array();
+    $items['main_menu'] = array();
+    $items['secondary_menu'] = array();
+    $items['action_links'] = array();
+  }
+
+}
+
+
+/**
+ * Override of template_preprocess_html()
+ *
+ * Add a class to the $classes array that can be used to apply styles via the cern_default theme (if option's enabled)
+ * This function unsets $page_top and $page_bottom
+ * so that they are not passed to html.tpl.php,
+ * preventing these regions from being rendered
+ */
+
+function cern_dev_status_preprocess_html(&$items) {
+  // CUSTOM DEV CLASSES FOR THEMING
+  $en_styling = variable_get('cern_dev_status_enable_devstyling', DEFAULT_ENABLE_DEVSTYLING);
+  
+  if ($en_styling) {
+    $style = variable_get('cern_dev_status_devstyling_type', DEFAULT_DEVSTYLING_TYPE);
+    $items['classes_array'][] = 'dev-status-' . $style; //Gets rendered in your page.tpl as a variable called $classes;
+    $items['classes_array'][] = 'padbot'; //This class is applied to the body to avoid the #dev-status-message div to hide the Save button while editing nodes/saving configurations. see dev_styling.css
+  }
+  //IP RESTRICTION   
+  if (cern_dev_status_restrict_ip_value()) {
+    if (isset($items['page']['page_top']))  unset($items['page']['page_top']);
+    if (isset($items['page']['page_top']))  unset($items['page']['page_bottom']);
+  }
+}
+
+
+// Functions for IP restriction feature
+
+
+/**
+ * Function used to set or determine if the user's ip address is not whitelisted
+ */
+
+function cern_dev_status_restrict_ip_value($block = FALSE) {
+  $blocked = &drupal_static(__function__);
+  if (is_null($blocked)) $blocked = FALSE;
+  if ($block) $blocked = TRUE;
+  return $blocked;
+}
+
+
+/**
+ * Helper function to check if an IP address is included in a 
+ * certain IP range (in CIDR syntaax)
+ * example: ipCheck ("192.168.1.23", "192.168.1.0/24"); 
+ */
+
+function cern_dev_status_ipCIDRCheck($IP, $CIDR) {
+  list ($net, $mask) = explode ("/", $CIDR);
+  $ip_net = ip2long($net);
+  $ip_mask = ~((1 << (32 - $mask)) - 1);
+  $ip_ip = ip2long($IP);
+  $ip_ip_net = $ip_ip & $ip_mask;
+  return ($ip_ip_net == $ip_net);
+}
+
+/**
+ * Override of template_preprocess_block()
+ *
+ * This function removes all data from blocks
+ * for users whose accounts have been blocked,
+ * preventing the blocks from being rendered
+ */
+
+function cern_dev_status_preprocess_block(&$items) {
+  if (cern_dev_status_restrict_ip_value()) {
+    unset($items['elements']);
+    unset($items['title_prefix']);
+    unset($items['title_suffix']);
+  }
+}
+
+
+/**
+ * Implementation of hook_js_alter()
+ *
+ * This function removes all javascript from the page
+ * with the exception of jquery.js and the javascript
+ * file provided with the module
+ */
+
+function cern_dev_status_js_alter(&$javascript) {
+  if (cern_dev_status_restrict_ip_value())  {
+    $cern_dev_status_js_path = drupal_get_path('module', 'cern_dev_status') . '/js/cern_dev_status.js';
+
+    foreach (array_keys($javascript) as $key) 
+      if ($key != $cern_dev_status_js_path && $key != 'misc/jquery.js') unset($javascript[$key]);
+    
+  }
+
+}

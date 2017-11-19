@@ -1,0 +1,27 @@
+.padbot {padding-bottom: 60px; } /*This class is applied to the body to avoid the #dev-status-message div to hide the Save button while editing nodes/saving configurations. see cern_dev_status_preprocess_html*/
+#dev-status-message {position: fixed; bottom: 0; left: 0; width: 100%;}
+#dev-status-message-content {background: #fff; background: rgba(255, 255, 255, 0.9); text-align: left; border-top: 2px solid #333; min-height: 60px; padding: 20px 20px 20px 60px; display: none; position: relative;}
+#dev-status-message.open #dev-status-message-content, #dev-status-message.js-disabled #dev-status-message-content {display: block;}
+#dev-status-message-content p, #dev-status-message-content h3 {margin: 0; max-width: 800px;}
+
+span#dev-status-icon {display: block; position: absolute; top: 20px; left: 20px; width: 20px; height: 20px; background: #f00;}
+#dev-status-message.dev-status-test span#dev-status-icon {background-color: #2fbe27;}
+#dev-status-message.dev-status-preprod span#dev-status-icon {background-color: #b847ff;}
+#dev-status-message.dev-status-dev span#dev-status-icon {background-color: #e80000;}
+
+#dev-status-message.closed .action-close {display: none;}
+#dev-status-message.open .action-open {display: none;}
+
+#dev-status-action {text-align: right; padding-right: 20px; margin-bottom: -3px;}
+#dev-status-action span {padding: 2px; background: #fff; background: rgba(187, 208, 231, 0.8); border: 2px solid #333; border-width: 2px 2px 0 2px;}
+
+.js-disabled #dev-status-action {display: none;}
+#dev-status-action {font-size: smaller; text-transform: uppercase;}
+#dev-status-action:hover {cursor: pointer; text-decoration: underline;}
+
+
+@media all and (max-width:480px) {
+    #dev-status-message {position: relative; font-size: smaller;}
+    #dev-status-message-content {padding: 0 10px 10px 10px; max-width: 100%;}
+    span#dev-status-icon {display: none;}	
+}

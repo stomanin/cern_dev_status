@@ -1,0 +1,22 @@
+<?php
+// $Id$
+
+/**
+ * @file
+ * Uninstall function for the cern_dev_status module.
+ */
+
+
+/**
+ * Implements hook_uninstall().
+ */
+function cern_dev_status_uninstall() {
+  variable_del('cern_dev_status_enable_noindex'); 
+  variable_del('cern_dev_status_enable_devstyling');
+  variable_del('cern_dev_status_devstyling_type');
+  variable_del('cern_dev_status_devstyling_message');
+  variable_del('cern_dev_status_enable_restrict_ip');
+  variable_del('cern_dev_status_restrict_ip_address_list');
+  variable_del('cern_dev_status_restrict_ip_override_auth_users');
+  variable_del('cern_dev_status_restrict_ip_mail_address');
+}
